@@ -47,7 +47,7 @@ def fix_multivar_columns_for_test(data_test, data_train, original_col_name):
 
 def setTypesToCols(trainX:pd.DataFrame, trainY:pd.DataFrame,
                    validX:pd.DataFrame, validY: pd.DataFrame,
-                   testX: pd.DataFrame, testY: pd.DataFrame):
+                   testX: pd.DataFrame):
 
     colOfMultiCategorial = ["Most_Important_IssueFillByMode", "Will_vote_only_large_partyFillByMode",
                             "Main_transportationFillByMode", "OccupationFillByMode"]
@@ -130,7 +130,7 @@ def setTypesToCols(trainX:pd.DataFrame, trainY:pd.DataFrame,
     validX = pd.concat([fix_multivar_columns_for_test(validX,trainX,colOfMultiCategorial),
                         trainX[colOfMultiCategorial]], axis=1)
 
-    return trainX, trainY, validX, validY, testX, testY
+    return trainX, trainY, validX, validY, testX
 
 def creatColVsColCorrelationMatrix(x_train_cat_number_only):
     colvscolresults = []
@@ -181,7 +181,16 @@ def chooseColumns(currCols,oldCols):
     res = [colName for colName in res if nanSuffix not in colName]
     return res
 
-
+def replacementSampling(df:pd.DataFrame):
+    partyName = df['Vote'].unique()
+    quntity = int(np.round(df.shape[0] / len(partyName)))
+    print(quntity)
+    dfAfterSampling = None
+    for party in partyName:
+        replace = True if df[df['Vote'] == party].shape[0] < quntity else False
+        dfAfterSamplingTemp = df[df['Vote'] == party].sample(quntity, replace=replace)
+        dfAfterSampling = pd.concat([dfAfterSampling, dfAfterSamplingTemp])
+    return dfAfterSampling.set_index(np.arange(dfAfterSampling.shape[0]))
 
 
 """
@@ -194,7 +203,7 @@ TODO: WORKFLOW
 6) Fill in missing values in numeric columns by mean (mean label for train, mean of column for test/val
 
 """
-def main():
+def main(method = None,suffix = None):
     # read data from file
     df = pd.read_csv("input/ElectionsData.csv")
     oldCols = df.columns
@@ -202,10 +211,20 @@ def main():
     print(final_test.columns)
     # correction of X. into % as in original data
     final_test.columns = [name.replace('X.', '%', 1) for name in final_test.columns]
+    final_test = final_test.rename(index=str,columns={"Financial_balance_score_.0.1.": "Financial_balance_score_(0-1)"})
+
 
     # print('Original distribution:')
     # partySize = {party: df.loc[df['Vote'] == party].shape[0] / df.shape[0] for party in df['Vote'].unique()}
     # print(partySize)
+
+    #
+    # ## to cope with imbalanced data
+    # if method == 'replacement':
+    #     df = replacementSampling(df)
+
+
+
 
     # seperate labels from data
     X = df.drop('Vote', axis=1)
@@ -214,9 +233,19 @@ def main():
     # Split to train, valid, test
     np.random.seed(0)
 
-    ## With stratified
-    x_train, x_testVal, y_train, y_testVal = train_test_split(X, Y, stratify=Y)
-    x_val, x_test, y_val, y_test = train_test_split(x_testVal, y_testVal, train_size=0.6, test_size=0.4,stratify=y_testVal)
+    ## With stratified or sample with replacements
+    if method == 'stratify' or method == 'replacement':
+        x_train, x_testVal, y_train, y_testVal = train_test_split(X, Y, stratify=Y)
+        x_val, x_test, y_val, y_test = train_test_split(x_testVal, y_testVal, train_size=0.6, test_size=0.4,
+                                                        stratify=y_testVal)
+        if method == 'replacement':
+            x_train['Vote'] = y_train.values
+            x_train = replacementSampling(x_train)
+            x_train = x_train.drop('Vote', axis=1)
+
+    elif method == None:
+        x_train, x_testVal, y_train, y_testVal = train_test_split(X, Y)
+        x_val, x_test, y_val, y_test = train_test_split(x_testVal, y_testVal, train_size=0.6, test_size=0.4)
 
 
 
@@ -249,8 +278,13 @@ def main():
 
     print('Entering stage 2: Convert into One-hot and ObjectInt')
     # Convert data to ONE-HOT & CATEGORY TODO Step 2
-    x_train_cat, y_train_cat, x_val_cat, y_val_cat, x_test_cat, y_test_cat = \
-        setTypesToCols(x_train.copy(), y_train.copy(), x_val.copy(), y_val.copy(), x_test.copy(), y_test.copy())
+    x_train_cat, y_train_cat, x_val_cat, y_val_cat, x_test_cat = \
+        setTypesToCols(x_train.copy(), y_train.copy(), x_val.copy(), y_val.copy(), x_test.copy())
+
+    y_test_cat = y_test.copy()
+    x_train_cat, y_train_cat, x_val_cat, y_val_cat, final_test_cat = \
+        setTypesToCols(x_train.copy(), y_train.copy(), x_val.copy(), y_val.copy(), final_test.copy())
+
 
 
     print('Entering stage 3: Detect and remove outliers')
@@ -275,13 +309,14 @@ def main():
         x_train_cat = stats.scaleNormalSingleColumn(x_train_cat,colToScale)
         x_val_cat = stats.scaleNormalSingleColumn(x_val_cat,colToScale)
         x_test_cat = stats.scaleNormalSingleColumn(x_test_cat,colToScale)
+        final_test_cat = stats.scaleNormalSingleColumn(final_test_cat, colToScale)
 
     colsToScaleMinMax = x_train_cat.select_dtypes(include=[np.number]).columns.difference(colsToScaleNorm) # rest of numeric cols
     for colToScale in colsToScaleMinMax: # scale by MINMAX
         x_train_cat = stats.scaleMinMaxSingleColumn(x_train_cat,colToScale)
         x_val_cat = stats.scaleMinMaxSingleColumn(x_val_cat,colToScale)
         x_test_cat = stats.scaleMinMaxSingleColumn(x_test_cat,colToScale)
-
+        final_test_cat = stats.scaleMinMaxSingleColumn(final_test_cat, colToScale)
 
     # List of relations between columns, according to Pearson and MI
     colToColRel = [["Avg_size_per_room", "Political_interest_Total_Score", "Yearly_IncomeK", "Avg_monthly_household_cost"],
@@ -312,6 +347,7 @@ def main():
         x_train_cat = fillNAByLabelMeanMedian(x_train_cat,y_train_cat,col,'Median')
         x_val_cat = fillNATestValMeanMedian(x_val_cat,col,'Median')
         x_test_cat = fillNATestValMeanMedian(x_test_cat,col,'Median')
+        final_test_cat = fillNATestValMeanMedian(final_test_cat, col, 'Median')
 
     colsToMean = x_train_cat.select_dtypes(include=[np.number]).columns.difference(colsToMedian)
     colsToMean = colsToMean.difference(colsFilledWithMode)
@@ -319,16 +355,17 @@ def main():
         x_train_cat = fillNAByLabelMeanMedian(x_train_cat,y_train_cat,col,'Mean')
         x_val_cat = fillNATestValMeanMedian(x_val_cat,col,'Mean')
         x_test_cat = fillNATestValMeanMedian(x_test_cat,col,'Mean')
-
+        final_test_cat = fillNATestValMeanMedian(final_test_cat, col, 'Mean')
 
     ## save and finish
+
     x_train_cat.to_csv("./output/x_train.csv")
     y_train_cat.to_csv("output/y_train")
     x_val_cat.to_csv("./output/x_val.csv")
     y_val_cat.to_csv("output/y_val")
     x_test_cat.to_csv("./output/x_test.csv")
     y_test_cat.to_csv("output/y_test")
-    final_test.to_csv("./output/final_test.csv")
+    final_test_cat.to_csv("./output/final_test.csv")
 
 
 if __name__ == '__main__':
