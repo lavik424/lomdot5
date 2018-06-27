@@ -244,7 +244,7 @@ def main():
         x_train = fillNAByLabelMode(x_train,y_train,col)
         x_val = fillNATestValMode(x_val,col)
         x_test = fillNATestValMode(x_test,col)
-
+        final_test = fillNATestValMode(final_test,col)
 
 
     print('Entering stage 2: Convert into One-hot and ObjectInt')
