@@ -127,8 +127,10 @@ def setTypesToCols(trainX:pd.DataFrame, trainY:pd.DataFrame,
     testX = pd.concat([fix_multivar_columns_for_test(testX,trainX,colOfMultiCategorial),
                        testX[colOfMultiCategorial]], axis=1)
 
+    # validX = pd.concat([fix_multivar_columns_for_test(validX,trainX,colOfMultiCategorial),
+    #                     trainX[colOfMultiCategorial]], axis=1)
     validX = pd.concat([fix_multivar_columns_for_test(validX,trainX,colOfMultiCategorial),
-                        trainX[colOfMultiCategorial]], axis=1)
+                        validX[colOfMultiCategorial]], axis=1)
 
     return trainX, trainY, validX, validY, testX
 
@@ -203,12 +205,12 @@ TODO: WORKFLOW
 6) Fill in missing values in numeric columns by mean (mean label for train, mean of column for test/val
 
 """
-def main(method = None,suffix = None):
+def main(dirName,method = None):
     # read data from file
     df = pd.read_csv("input/ElectionsData.csv")
     oldCols = df.columns
     final_test = pd.read_csv("input/ElectionsData_Pred_Features.csv",index_col='IdentityCard_Num')
-    print(final_test.columns)
+
     # correction of X. into % as in original data
     final_test.columns = [name.replace('X.', '%', 1) for name in final_test.columns]
     final_test = final_test.rename(index=str,columns={"Financial_balance_score_.0.1.": "Financial_balance_score_(0-1)"})
@@ -234,18 +236,15 @@ def main(method = None,suffix = None):
     np.random.seed(0)
 
     ## With stratified or sample with replacements
-    if method == 'stratify' or method == 'replacement':
+    if method == 'stratify':
         x_train, x_testVal, y_train, y_testVal = train_test_split(X, Y, stratify=Y)
         x_val, x_test, y_val, y_test = train_test_split(x_testVal, y_testVal, train_size=0.6, test_size=0.4,
                                                         stratify=y_testVal)
-        if method == 'replacement':
-            x_train['Vote'] = y_train.values
-            x_train = replacementSampling(x_train)
-            x_train = x_train.drop('Vote', axis=1)
 
     elif method == None:
         x_train, x_testVal, y_train, y_testVal = train_test_split(X, Y)
         x_val, x_test, y_val, y_test = train_test_split(x_testVal, y_testVal, train_size=0.6, test_size=0.4)
+
 
 
 
@@ -276,14 +275,17 @@ def main(method = None,suffix = None):
         final_test = fillNATestValMode(final_test,col)
 
 
+
     print('Entering stage 2: Convert into One-hot and ObjectInt')
     # Convert data to ONE-HOT & CATEGORY TODO Step 2
     x_train_cat, y_train_cat, x_val_cat, y_val_cat, x_test_cat = \
         setTypesToCols(x_train.copy(), y_train.copy(), x_val.copy(), y_val.copy(), x_test.copy())
 
+
     y_test_cat = y_test.copy()
-    x_train_cat, y_train_cat, x_val_cat, y_val_cat, final_test_cat = \
+    _, _, _, _, final_test_cat = \
         setTypesToCols(x_train.copy(), y_train.copy(), x_val.copy(), y_val.copy(), final_test.copy())
+
 
 
 
@@ -358,14 +360,16 @@ def main(method = None,suffix = None):
         final_test_cat = fillNATestValMeanMedian(final_test_cat, col, 'Mean')
 
     ## save and finish
-
-    x_train_cat.to_csv("./output/x_train.csv")
-    y_train_cat.to_csv("output/y_train")
-    x_val_cat.to_csv("./output/x_val.csv")
-    y_val_cat.to_csv("output/y_val")
-    x_test_cat.to_csv("./output/x_test.csv")
-    y_test_cat.to_csv("output/y_test")
-    final_test_cat.to_csv("./output/final_test.csv")
+    old_pwd = os.getcwd()
+    os.chdir(dirName)
+    x_train_cat.to_csv("x_train.csv")
+    y_train_cat.to_csv("y_train.csv")
+    x_val_cat.to_csv("x_val.csv")
+    y_val_cat.to_csv("y_val.csv")
+    x_test_cat.to_csv("x_test.csv")
+    y_test_cat.to_csv("y_test.csv")
+    final_test_cat.to_csv("final_test.csv")
+    os.chdir(old_pwd)
 
 
 if __name__ == '__main__':

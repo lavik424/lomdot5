@@ -1,4 +1,6 @@
 import mainPreprocessing
+import os
+import pandas as pd
 
 
 
@@ -39,24 +41,29 @@ def chooseRightColumns(colsAfterWork):
 
 
 
-def loadEnvirment(onlyRightCols = True):
+def loadEnvirment(onlyRightCols = True, dirName = 'input'):
     """
 
     :return: 6 dataFrames of train, validarion and test x/y
     """
 
+
     df = pd.read_csv("./input/ElectionsData.csv")
     oldCols = df.columns
 
     ## load tables from prev hw
-    x_train = pd.read_csv("./input/x_train.csv" ,index_col=0)
-    x_val = pd.read_csv("./input/x_val.csv", index_col=0)
-    x_test = pd.read_csv("./input/x_test.csv", index_col=0)
-    y_train = pd.read_csv("./input/y_train.csv" ,index_col=0)
-    y_val = pd.read_csv("./input/y_val.csv", index_col=0)
-    y_test = pd.read_csv("./input/y_test.csv", index_col=0)
+    old_pwd = os.getcwd()
+    os.chdir(dirName)
 
-    final_test = pd.read_csv("./input/final_test.csv", index_col='IdentityCard_Num')
+    x_train = pd.read_csv("x_train.csv" ,index_col=0)
+    x_val = pd.read_csv("x_val.csv", index_col=0)
+    x_test = pd.read_csv("x_test.csv", index_col=0)
+    y_train = pd.read_csv("y_train.csv" ,index_col=0)
+    y_val = pd.read_csv("y_val.csv", index_col=0)
+    y_test = pd.read_csv("y_test.csv", index_col=0)
+
+    final_test = pd.read_csv("final_test.csv", index_col='IdentityCard_Num')
+    os.chdir(old_pwd)
 
     # choose the correct set of features
     colsAfterWork = chooseColumns(x_train.columns, oldCols)
@@ -75,9 +82,19 @@ def loadEnvirment(onlyRightCols = True):
     return x_train, x_val, x_test, y_train, y_val, y_test, final_test
 
 def main():
-    mainPreprocessing.main(method='replacement')
+    method = 'stratify'
+    dirName = 'stratify input'
+    # mainPreprocessing.main(method=method,dirName=dirName)
 
-    (x_train, x_val, x_test, y_train, y_val, y_test, final_test) = loadEnvirment()
+    all = (x_train, x_val, x_test, y_train, y_val, y_test, final_test) = \
+        loadEnvirment(dirName=dirName)
+    
+
+    if method == 'replacement':
+        x_train['Vote'] = y_train.values
+        x_train = mainPreprocessing.replacementSampling(x_train)
+        x_train = x_train.drop('Vote', axis=1)
+
 
 if __name__ == '__main__':
     main()
